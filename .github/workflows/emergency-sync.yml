@@ -147,20 +147,13 @@ jobs:
         mkdir -p nodes
         
         # 下载文件
-        GIST_BASE_URL="https://gist.githubusercontent.com/shuaidaoya/9e5cf2749c0ce79932dd9229d9b4162b/raw"
-        
-        echo "📥 紧急下载 all.yaml..."
-        curl -fsSL "${GIST_BASE_URL}/all.yaml" -o nodes/all.yaml || echo "❌ all.yaml 下载失败"
-        
-        echo "📥 紧急下载 base64.txt..."
-        curl -fsSL "${GIST_BASE_URL}/base64.txt" -o nodes/base64.txt || echo "❌ base64.txt 下载失败"
-        
-        echo "📥 紧急下载 history.yaml..."
-        curl -fsSL "${GIST_BASE_URL}/history.yaml" -o nodes/history.yaml || echo "❌ history.yaml 下载失败"
-        
-        echo "📥 紧急下载 mihomo.yaml..."
-        curl -fsSL "${GIST_BASE_URL}/mihomo.yaml" -o nodes/mihomo.yaml || echo "❌ mihomo.yaml 下载失败"
-        
+        REPO_RAW_BASE_URL: "https://raw.githubusercontent.com/taokun5881/FreeNodes/main"        
+        # 下载各种格式的订阅文件
+        echo "📥 正在下载 all.yaml..."
+        curl -fsSL "${REPO_RAW_BASE_URL}/nodes/all.yaml" -o nodes/all.yaml || echo "❌ all.yaml 下载失败"
+          curl -fsSL "${REPO_RAW_BASE_URL}/nodes/base64.txt" -o nodes/base64.txt || echo "❌ base64.txt 下载失败"
+          curl -fsSL "${REPO_RAW_BASE_URL}/nodes/history.yaml" -o nodes/history.yaml || echo "❌ history.yaml 下载失败"
+          curl -fsSL "${REPO_RAW_BASE_URL}/nodes/mihomo.yaml" -o nodes/mihomo.yaml || echo "❌ mihomo.yaml 下载失败"
         # 统计节点
         yaml_nodes=0
         base64_lines=0
