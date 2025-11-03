@@ -59,15 +59,45 @@ jobs:
             }' README.md
           fi
 
-      - name: 💾 提交变更
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "🔄 自动更新节点文件 - $(date '+%Y-%m-%d %H:%M:%S')"
-            git push
-          else
-            echo "ℹ️ 没有检测到文件变更"
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: 自动更新节点文件
+  run: |
+    # 配置 Git 用户信息
+    git config --local user.email "action@github.com"
+    git config --local user.name "GitHub Action"
+
+    # 获取最新提交信息
+    LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+
+    # 如果上次提交已经是自动更新的，则跳过
+    if [[ "$LAST_COMMIT_MSG" == *"🔄 自动更新节点文件"* ]]; then
+      echo "ℹ️ 上次提交已经是自动更新，跳过此次操作"
+      exit 0
+    fi
+
+- name: 自动更新节点文件
+  run: |
+    # 配置 Git 用户信息
+    git config --local user.email "action@github.com"
+    git config --local user.name "GitHub Action"
+
+    # 获取最新提交信息
+    LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+
+    # 如果上次提交已经是自动更新的，则跳过
+    if [[ "$LAST_COMMIT_MSG" == *"🔄 自动更新节点文件"* ]]; then
+      echo "ℹ️ 上次提交已经是自动更新，跳过此次操作"
+      exit 0
+    fi
+
+    # 检查是否有文件变更
+    if [ -n "$(git status --porcelain)" ]; then
+      git add .
+      git commit -m "🔄 自动更新节点文件 - $(date '+%Y-%m-%d %H:%M:%S') [skip ci]"
+      git push https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git HEAD:main
+    else
+      echo "ℹ️ 没有检测到文件变更"
+    fi
+  shell: bash
+  env:
+    TZ: Asia/Shanghai
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
