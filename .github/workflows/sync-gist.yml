@@ -1,25 +1,27 @@
-name: sync-nodes
+name: sync-gist-backup
 
 on:
   schedule:
     - cron: '*/30 * * * *' # 每30分钟自动执行
-  workflow_dispatch:        # 允许手动触发
+  workflow_dispatch:
   push:
     branches: [ main ]
-    paths: [ '.github/workflows/sync-nodes.yml' ]
+    paths: [ '.github/workflows/sync-gist-backup.yml' ]
 
 permissions:
   contents: write
   actions: read
 
 jobs:
-  sync-nodes:
+  sync-gist-backup:
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Shanghai
+      # 如果需要也可以全局定义 REPO_RAW_BASE_URL 在这里
+      REPO_RAW_BASE_URL: "https://raw.githubusercontent.com/taokun5881/FreeNodes/main"
 
     steps:
-      - name: 📦 检出代码
+      - name: 📦 Checkout code
         uses: actions/checkout@v4
         with:
           token: ${{ github.token }}
@@ -37,12 +39,18 @@ jobs:
             if [ "$TIME_DIFF" -lt 30 ]; then
               echo "SKIP_EXECUTION=true" >> $GITHUB_OUTPUT
               echo "EXECUTION_REASON=距离上次更新不足30分钟" >> $GITHUB_OUTPUT
+            elif [ "$TIME_DIFF" -gt 120 ]; then
+              echo "SKIP_EXECUTION=false" >> $GITHUB_OUTPUT
+              echo "FORCE_UPDATE=true" >> $GITHUB_OUTPUT
+              echo "EXECUTION_REASON=超过2小时未更新，强制执行" >> $GITHUB_OUTPUT
             else
               echo "SKIP_EXECUTION=false" >> $GITHUB_OUTPUT
+              echo "FORCE_UPDATE=false" >> $GITHUB_OUTPUT
               echo "EXECUTION_REASON=正常执行间隔(${TIME_DIFF}分钟)" >> $GITHUB_OUTPUT
             fi
           else
             echo "SKIP_EXECUTION=false" >> $GITHUB_OUTPUT
+            echo "FORCE_UPDATE=true" >> $GITHUB_OUTPUT
             echo "EXECUTION_REASON=README.md不存在，初始化执行" >> $GITHUB_OUTPUT
           fi
           echo "TRIGGER_TYPE=${{ github.event_name }}" >> $GITHUB_OUTPUT
@@ -50,7 +58,7 @@ jobs:
       - name: 📊 执行状态报告
         run: |
           echo "## 🔍 执行状态检查" >> $GITHUB_STEP_SUMMARY
-          echo "**触发方式**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**触发方式**: ${{ steps.health_check.outputs.TRIGGER_TYPE }}" >> $GITHUB_STEP_SUMMARY
           echo "**执行原因**: ${{ steps.health_check.outputs.EXECUTION_REASON }}" >> $GITHUB_STEP_SUMMARY
           echo "**是否跳过**: ${{ steps.health_check.outputs.SKIP_EXECUTION }}" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.health_check.outputs.SKIP_EXECUTION }}" = "true" ]; then
@@ -59,28 +67,31 @@ jobs:
             echo "▶️ 继续执行更新流程" >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: 🟢 设置 Node.js 环境
+      - name: 🟢 Setup Node.js
         if: steps.health_check.outputs.SKIP_EXECUTION != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: 📁 创建 nodes 目录
-        if: steps.health_check.outputs.SKIP_EXECUTION != 'true'
+      - name: 📁 Ensure nodes directory
+        if: steps_health_check.outputs.SKIP_EXECUTION != 'true'
         run: mkdir -p nodes
 
-      - name: 📥 下载节点文件
+      - name: 📥 Download files from repo
         if: steps.health_check.outputs.SKIP_EXECUTION != 'true'
         env:
           REPO_RAW_BASE_URL: "https://raw.githubusercontent.com/taokun5881/FreeNodes/main"
         run: |
-          echo "📥 正在下载节点文件..."
+          echo "📥 正在下载 nodes/all.yaml ..."
           curl -fsSL "${REPO_RAW_BASE_URL}/nodes/all.yaml" -o nodes/all.yaml || echo "❌ all.yaml 下载失败"
+          echo "📥 正在下载 nodes/base64.txt ..."
           curl -fsSL "${REPO_RAW_BASE_URL}/nodes/base64.txt" -o nodes/base64.txt || echo "❌ base64.txt 下载失败"
+          echo "📥 正在下载 nodes/history.yaml ..."
           curl -fsSL "${REPO_RAW_BASE_URL}/nodes/history.yaml" -o nodes/history.yaml || echo "❌ history.yaml 下载失败"
+          echo "📥 正在下载 nodes/mihomo.yaml ..."
           curl -fsSL "${REPO_RAW_BASE_URL}/nodes/mihomo.yaml" -o nodes/mihomo.yaml || echo "❌ mihomo.yaml 下载失败"
 
-      - name: 🔢 统计节点数量
+      - name: 🔢 Count nodes
         if: steps.health_check.outputs.SKIP_EXECUTION != 'true'
         id: count
         run: |
@@ -95,9 +106,8 @@ jobs:
           fi
           echo "yaml_nodes=$yaml_nodes" >> $GITHUB_OUTPUT
           echo "base64_lines=$base64_lines" >> $GITHUB_OUTPUT
-          echo "节点统计完成: YAML=$yaml_nodes, BASE64=$base64_lines"
 
-      - name: 🔄 提交并推送更新
+      - name: 🔄 Commit & push
         if: steps.health_check.outputs.SKIP_EXECUTION != 'true'
         run: |
           git config --local user.email "action@github.com"
@@ -110,3 +120,15 @@ jobs:
             echo "ℹ️ 没有检测到文件变更"
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      - name: 📣 Summary
+        run: |
+          echo "## 📊 同步结果" >> $GITHUB_STEP_SUMMARY
+          echo "**同步时间**: $(date '+%Y-%m-%d %H:%M:%S 北京时间')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          for file in nodes/*; do
+            if [ -f "$file" ]; then
+              filesize=$(ls -lh "$file" | awk '{print $5}')
+              echo "- $file : $filesize" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
