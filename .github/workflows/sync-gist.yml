@@ -1,23 +1,22 @@
-name: sync-gist-backup
+name: sync-gist
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # 每30分钟自动执行
+    - cron: '*/30 * * * *' # 每30分钟执行一次
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths: [ '.github/workflows/sync-gist-backup.yml' ]
+    paths: [ '.github/workflows/sync-gist.yml' ]
 
 permissions:
   contents: write
   actions: read
 
 jobs:
-  sync-gist-backup:
+  sync-gist:
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Shanghai
-      # 如果需要也可以全局定义 REPO_RAW_BASE_URL 在这里
       REPO_RAW_BASE_URL: "https://raw.githubusercontent.com/taokun5881/FreeNodes/main"
 
     steps:
@@ -74,7 +73,7 @@ jobs:
           node-version: '18'
 
       - name: 📁 Ensure nodes directory
-        if: steps_health_check.outputs.SKIP_EXECUTION != 'true'
+        if: steps.health_check.outputs.SKIP_EXECUTION != 'true'
         run: mkdir -p nodes
 
       - name: 📥 Download files from repo
@@ -82,13 +81,10 @@ jobs:
         env:
           REPO_RAW_BASE_URL: "https://raw.githubusercontent.com/taokun5881/FreeNodes/main"
         run: |
-          echo "📥 正在下载 nodes/all.yaml ..."
+          echo "📥 正在下载节点文件..."
           curl -fsSL "${REPO_RAW_BASE_URL}/nodes/all.yaml" -o nodes/all.yaml || echo "❌ all.yaml 下载失败"
-          echo "📥 正在下载 nodes/base64.txt ..."
           curl -fsSL "${REPO_RAW_BASE_URL}/nodes/base64.txt" -o nodes/base64.txt || echo "❌ base64.txt 下载失败"
-          echo "📥 正在下载 nodes/history.yaml ..."
           curl -fsSL "${REPO_RAW_BASE_URL}/nodes/history.yaml" -o nodes/history.yaml || echo "❌ history.yaml 下载失败"
-          echo "📥 正在下载 nodes/mihomo.yaml ..."
           curl -fsSL "${REPO_RAW_BASE_URL}/nodes/mihomo.yaml" -o nodes/mihomo.yaml || echo "❌ mihomo.yaml 下载失败"
 
       - name: 🔢 Count nodes
@@ -118,6 +114,7 @@ jobs:
             git push
           else
             echo "ℹ️ 没有检测到文件变更"
+          fi
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -125,7 +122,6 @@ jobs:
         run: |
           echo "## 📊 同步结果" >> $GITHUB_STEP_SUMMARY
           echo "**同步时间**: $(date '+%Y-%m-%d %H:%M:%S 北京时间')" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           for file in nodes/*; do
             if [ -f "$file" ]; then
               filesize=$(ls -lh "$file" | awk '{print $5}')
