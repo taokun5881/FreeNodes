@@ -1,4 +1,4 @@
-name: sync-gist-backup
+name: sync-gist
 
 on:
   schedule:
@@ -13,7 +13,7 @@ permissions:
   actions: read
 
 jobs:
-  sync-gist-backup:
+  sync-gist:
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Shanghai
@@ -114,6 +114,7 @@ jobs:
             git push
           else
             echo "ℹ️ 没有检测到文件变更"
+          fi
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
