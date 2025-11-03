@@ -18,7 +18,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: 📦 检出代码
+      - name: 📦 检出仓库
         uses: actions/checkout@v4
         with:
           token: ${{ github.token }}
@@ -60,7 +60,7 @@ jobs:
             }' README.md
           fi
 
-      - name: 🔄 自动提交更新
+      - name: 🔄 自动提交更新（仅在有变更时）
         shell: bash
         run: |
           git config --local user.email "action@github.com"
@@ -74,10 +74,20 @@ jobs:
             exit 0
           fi
 
-          # 检查是否有文件变更
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
+          # 检查 nodes 文件和 README 是否有变更
+          git update-index -q --refresh
+          CHANGED_FILES=$(git diff --name-only)
+
+          COMMIT_FILES=""
+          for file in $CHANGED_FILES; do
+            if [[ "$file" == nodes/* ]] || [[ "$file" == "README.md" ]]; then
+              COMMIT_FILES="$COMMIT_FILES $file"
+            fi
+          done
+
+          if [ -n "$COMMIT_FILES" ]; then
+            git add $COMMIT_FILES
             git commit -m "🔄 自动更新节点文件 - $(date '+%Y-%m-%d %H:%M:%S') [skip ci]"
             git push https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git HEAD:main
           else
-            echo "ℹ️ 没有检测到文件变更"
+            echo "ℹ️ nodes 文件和 README 没有变更，跳过提交"
