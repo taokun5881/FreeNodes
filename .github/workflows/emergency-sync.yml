@@ -1,12 +1,10 @@
-name: 🚨 紧急恢复同步
+name: "🚨 紧急恢复同步"
 
 on:
   schedule:
-    # 每30分钟执行一次 (统一间隔，避免轮换)
-    - cron: '*/30 * * * *'
-  workflow_dispatch: # 允许手动触发紧急恢复
+    - cron: '*/30 * * * *' # 每30分钟执行一次
+  workflow_dispatch:
 
-# 设置权限
 permissions:
   contents: write
   actions: write
@@ -16,236 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Shanghai
-    
-    steps:
-    - name: 📦 检出代码
-      uses: actions/checkout@v4
-      with:
-        token: ${{ github.token }}
-        fetch-depth: 0
-        
-    - name: 🚨 紧急状态检查
-      id: emergency_check
-      run: |
-        echo "🚨 开始紧急状态检查..."
-        
-        # 获取最后更新时间
-        if [ -f "README.md" ]; then
-          LAST_UPDATE=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\} [0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}' README.md | tail -1)
-          if [ -n "$LAST_UPDATE" ]; then
-            echo "📅 最后更新时间: $LAST_UPDATE"
-            
-            # 计算时间差（分钟）
-            CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
-            LAST_TIMESTAMP=$(date -d "$LAST_UPDATE" +%s 2>/dev/null || echo "0")
-            CURRENT_TIMESTAMP=$(date -d "$CURRENT_TIME" +%s)
-            TIME_DIFF=$(( (CURRENT_TIMESTAMP - LAST_TIMESTAMP) / 60 ))
-            
-            echo "⏰ 当前时间: $CURRENT_TIME"
-            echo "⏱️ 时间间隔: $TIME_DIFF 分钟"
-            
-            # 紧急恢复判断标准
-            if [ "$TIME_DIFF" -gt 90 ]; then
-              echo "🚨 紧急情况：距离上次更新超过90分钟！"
-              echo "🔧 主触发器和备用触发器可能都已失效"
-              echo "EMERGENCY_REQUIRED=true" >> $GITHUB_OUTPUT
-              echo "EMERGENCY_REASON=超过90分钟未更新，主备触发器可能都已失效" >> $GITHUB_OUTPUT
-              echo "TIME_SINCE_LAST=$TIME_DIFF" >> $GITHUB_OUTPUT
-            else
-              echo "✅ 系统正常：距离上次更新仅${TIME_DIFF}分钟"
-              echo "EMERGENCY_REQUIRED=false" >> $GITHUB_OUTPUT
-              echo "EMERGENCY_REASON=系统正常运行，无需紧急恢复" >> $GITHUB_OUTPUT
-              echo "TIME_SINCE_LAST=$TIME_DIFF" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "⚠️ 无法获取最后更新时间，可能需要紧急恢复"
-            echo "EMERGENCY_REQUIRED=true" >> $GITHUB_OUTPUT
-            echo "EMERGENCY_REASON=无法获取最后更新时间，系统状态异常" >> $GITHUB_OUTPUT
-            echo "TIME_SINCE_LAST=unknown" >> $GITHUB_OUTPUT
-          fi
-        else
-          echo "🚨 README.md文件不存在，需要紧急恢复！"
-          echo "EMERGENCY_REQUIRED=true" >> $GITHUB_OUTPUT
-          echo "EMERGENCY_REASON=README.md文件不存在，系统严重异常" >> $GITHUB_OUTPUT
-          echo "TIME_SINCE_LAST=unknown" >> $GITHUB_OUTPUT
-        fi
-        
-        # 记录触发方式
-        echo "🎯 触发方式: ${{ github.event_name }} (紧急恢复检查)"
-        echo "TRIGGER_TYPE=${{ github.event_name }}" >> $GITHUB_OUTPUT
-        
-    - name: 📊 紧急状态报告
-      run: |
-        echo "## 🚨 紧急恢复状态检查" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**检查时间**: $(date '+%Y-%m-%d %H:%M:%S 北京时间')" >> $GITHUB_STEP_SUMMARY
-        echo "**触发方式**: ${{ steps.emergency_check.outputs.TRIGGER_TYPE }}" >> $GITHUB_STEP_SUMMARY
-        echo "**距离上次更新**: ${{ steps.emergency_check.outputs.TIME_SINCE_LAST }} 分钟" >> $GITHUB_STEP_SUMMARY
-        echo "**是否需要紧急恢复**: ${{ steps.emergency_check.outputs.EMERGENCY_REQUIRED }}" >> $GITHUB_STEP_SUMMARY
-        echo "**检查结果**: ${{ steps.emergency_check.outputs.EMERGENCY_REASON }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "${{ steps.emergency_check.outputs.EMERGENCY_REQUIRED }}" = "true" ]; then
-          echo "🚨 **需要立即执行紧急恢复！**" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "✅ **系统运行正常，无需紧急恢复**" >> $GITHUB_STEP_SUMMARY
-        fi
 
-    - name: 🚨 触发紧急恢复
-      if: steps.emergency_check.outputs.EMERGENCY_REQUIRED == 'true'
-      run: |
-        echo "🚨 开始执行紧急恢复流程..."
-        
-        # 记录紧急恢复事件
-        echo "## 🚨 紧急恢复事件记录" >> emergency_recovery.log
-        echo "- 时间: $(date '+%Y-%m-%d %H:%M:%S')" >> emergency_recovery.log
-        echo "- 原因: ${{ steps.emergency_check.outputs.EMERGENCY_REASON }}" >> emergency_recovery.log
-        echo "- 距离上次更新: ${{ steps.emergency_check.outputs.TIME_SINCE_LAST }} 分钟" >> emergency_recovery.log
-        echo "- 触发方式: ${{ steps.emergency_check.outputs.TRIGGER_TYPE }}" >> emergency_recovery.log
-        echo "---" >> emergency_recovery.log
-        
-        # 使用GitHub API触发主工作流
-        echo "🔧 正在通过API触发主同步工作流..."
-        
-        curl -X POST \
-          -H "Accept: application/vnd.github.v3+json" \
-          -H "Authorization: token ${{ github.token }}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          https://api.github.com/repos/${{ github.repository }}/actions/workflows/sync-gist.yml/dispatches \
-          -d '{"ref":"main","inputs":{"emergency_trigger":"true"}}'
-        
-        if [ $? -eq 0 ]; then
-          echo "✅ 主工作流触发成功"
-          echo "MAIN_TRIGGER_SUCCESS=true" >> $GITHUB_OUTPUT
-        else
-          echo "❌ 主工作流触发失败，尝试触发备用工作流"
-          echo "MAIN_TRIGGER_SUCCESS=false" >> $GITHUB_OUTPUT
-          
-          # 如果主工作流触发失败，尝试触发备用工作流
-          curl -X POST \
-            -H "Accept: application/vnd.github.v3+json" \
-            -H "Authorization: token ${{ github.token }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/sync-gist-backup.yml/dispatches \
-            -d '{"ref":"main","inputs":{"emergency_trigger":"true"}}'
-          
-          if [ $? -eq 0 ]; then
-            echo "✅ 备用工作流触发成功"
-            echo "BACKUP_TRIGGER_SUCCESS=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ 备用工作流触发也失败"
-            echo "BACKUP_TRIGGER_SUCCESS=false" >> $GITHUB_OUTPUT
-          fi
-        fi
-        
-    - name: 🔧 直接执行紧急同步
-      if: steps.emergency_check.outputs.EMERGENCY_REQUIRED == 'true'
-      run: |
-        echo "🔧 如果API触发失败，直接执行紧急同步..."
-        
-        # 创建nodes目录
-        mkdir -p nodes
-        
-        # 下载文件
-        REPO_RAW_BASE_URL: "https://raw.githubusercontent.com/taokun5881/FreeNodes/main"        
-        # 下载各种格式的订阅文件
-        echo "📥 正在下载 all.yaml..."
-        curl -fsSL "${REPO_RAW_BASE_URL}/nodes/all.yaml" -o nodes/all.yaml || echo "❌ all.yaml 下载失败"
-          curl -fsSL "${REPO_RAW_BASE_URL}/nodes/base64.txt" -o nodes/base64.txt || echo "❌ base64.txt 下载失败"
-          curl -fsSL "${REPO_RAW_BASE_URL}/nodes/history.yaml" -o nodes/history.yaml || echo "❌ history.yaml 下载失败"
-          curl -fsSL "${REPO_RAW_BASE_URL}/nodes/mihomo.yaml" -o nodes/mihomo.yaml || echo "❌ mihomo.yaml 下载失败"
-        # 统计节点
-        yaml_nodes=0
-        base64_lines=0
-        
-        if [ -f "nodes/all.yaml" ] && [ -s "nodes/all.yaml" ]; then
-          yaml_nodes=$(grep -c "server:" nodes/all.yaml 2>/dev/null || echo "0")
-        fi
-        
-        if [ -f "nodes/base64.txt" ] && [ -s "nodes/base64.txt" ]; then
-          decoded_content=$(base64 -d nodes/base64.txt 2>/dev/null)
-          if [ $? -eq 0 ] && [ -n "$decoded_content" ]; then
-            base64_lines=$(echo "$decoded_content" | grep -c "^[a-zA-Z0-9]*://" 2>/dev/null || echo "0")
-          fi
-        fi
-        
-        echo "📊 紧急统计: YAML: $yaml_nodes 个, Base64: $base64_lines 个"
-        
-        # 更新README
-        current_date=$(date '+%Y-%m-%d %H:%M:%S')
-        current_utc=$(date '+%Y-%m-%d %H:%M:%S 北京时间')
-        
-        if [ -f "README.md" ]; then
-          # 更新统计信息
-          sed -i '/<!-- AUTO_STATS_START -->/,/<!-- AUTO_STATS_END -->/{
-            s/| 🕐 \*\*最后更新时间\*\* | .* |/| 🕐 **最后更新时间** | '"$current_utc"' |/
-            s/| 📄 \*\*YAML 节点\*\* | .* |/| 📄 **YAML 节点** | '"$yaml_nodes"' 个 |/
-            s/| 📝 \*\*Base64 节点数\*\* | .* |/| 📝 **Base64 节点数** | '"$base64_lines"' 个 |/
-            s/| 🔄 \*\*同步状态\*\* | .* |/| 🔄 **同步状态** | 🚨 紧急恢复 |/
-          }' README.md
-          
-          # 添加紧急恢复记录
-          node_details="🚨 紧急恢复更新 - YAML:${yaml_nodes}个, Base64:${base64_lines}个"
-          node_summary="YAML:${yaml_nodes}个, Base64:${base64_lines}个"
-          
-          sed -i '/|------|------|----------|/a\| '"$current_date"' | '"$node_summary"' | '"$node_details"' |' README.md
-          
-          # 限制更新日志记录数量为10条
-          echo "🔧 清理超出限制的旧记录..."
-          awk '
-          BEGIN { in_changelog = 0; record_count = 0 }
-          /## 📋 更新日志/ { in_changelog = 1; print; next }
-          /^## / && in_changelog && !/## 📋 更新日志/ { in_changelog = 0 }
-          in_changelog && /^\|.*\|.*\|.*\|$/ && !/^\|.*---\|.*---\|.*\|$/ && !/时间.*节点数量.*节点详情/ {
-              record_count++
-              if (record_count <= 10) print
-              next
-          }
-          { print }
-          ' README.md > README.md.tmp && mv README.md.tmp README.md
-          
-          echo "✅ README.md 紧急更新完成"
-        fi
-        
-    - name: 💾 提交紧急恢复结果
-      if: steps.emergency_check.outputs.EMERGENCY_REQUIRED == 'true'
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action (Emergency)"
-        
-        # 检查是否有变更
-        if [ -n "$(git status --porcelain)" ]; then
-          git add .
-          git commit -m "🚨 紧急恢复更新 - $(date '+%Y-%m-%d %H:%M:%S') - 主备触发器失效"
-          git push
-          echo "✅ 紧急恢复完成并推送到仓库"
-        else
-          echo "ℹ️ 没有检测到文件变更"
-        fi
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-        
-    - name: 📋 紧急恢复总结
-      run: |
-        echo "## 🚨 紧急恢复执行结果" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**执行时间**: $(date '+%Y-%m-%d %H:%M:%S 北京时间')" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "${{ steps.emergency_check.outputs.EMERGENCY_REQUIRED }}" = "true" ]; then
-          echo "**恢复状态**: 🚨 已执行紧急恢复" >> $GITHUB_STEP_SUMMARY
-          echo "**恢复原因**: ${{ steps.emergency_check.outputs.EMERGENCY_REASON }}" >> $GITHUB_STEP_SUMMARY
-          echo "**距离上次更新**: ${{ steps.emergency_check.outputs.TIME_SINCE_LAST }} 分钟" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔧 恢复措施" >> $GITHUB_STEP_SUMMARY
-          echo "1. ✅ 通过API触发主工作流" >> $GITHUB_STEP_SUMMARY
-          echo "2. ✅ 通过API触发备用工作流" >> $GITHUB_STEP_SUMMARY
-          echo "3. ✅ 直接执行紧急同步" >> $GITHUB_STEP_SUMMARY
-          echo "4. ✅ 更新README状态" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🎉 **紧急恢复完成！系统已恢复正常运行**" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "**检查结果**: ✅ 系统运行正常" >> $GITHUB_STEP_SUMMARY
-          echo "**距离上次更新**: ${{ steps.emergency_check.outputs.TIME_SINCE_LAST }} 分钟" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "💚 **无需紧急恢复，系统运行正常**" >> $GITHUB_STEP_SUMMARY
-        fi
+    steps:
+      - name: 📦 检出代码
+        uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+
+      - name: 🚨 紧急状态检查
+        id: emergency_check
+        run: |
+          echo "🚨 开始紧急状态检查..."
+          if [ -f "README.md" ]; then
+            LAST_UPDATE=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\} [0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}' README.md | tail -1)
